@@ -7,8 +7,8 @@ from io import BytesIO
 
 # Third Party Stuff
 from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.serialization import pkcs7
+from cryptography.hazmat.primitives import serialization
+from endesive import signer as endesive_signer
 
 
 class Alignment:
@@ -353,10 +353,11 @@ class ApplePass(object):
         self, manifest, certificate, key, wwdr_certificate, password
     ):
         """
-        Creates a signature (DER encoded) of the manifest.
-        Rewritten to use cryptography library instead of M2Crypto
-        The manifest is the file
-        containing a list of files included in the pass file (and their hashes).
+        Creates a detached PKCS7 (CMS) DER signature over the manifest.
+
+        Built via endesive because cryptography>=39 rejects SHA1 in
+        PKCS7SignatureBuilder, while Apple Wallet pkpass still requires
+        SHA1 for the manifest signature.
         """
         cert = x509.load_pem_x509_certificate(self._read_file_bytes(certificate))
         priv_key = serialization.load_pem_private_key(
@@ -366,13 +367,13 @@ class ApplePass(object):
             self._read_file_bytes(wwdr_certificate)
         )
 
-        options = [pkcs7.PKCS7Options.DetachedSignature]
-        return (
-            pkcs7.PKCS7SignatureBuilder()
-            .set_data(manifest.encode("UTF-8"))
-            .add_signer(cert, priv_key, hashes.SHA1())
-            .add_certificate(wwdr_cert)
-            .sign(serialization.Encoding.DER, options)
+        return endesive_signer.sign(
+            datau=manifest.encode("UTF-8"),
+            key=priv_key,
+            cert=cert,
+            othercerts=[wwdr_cert],
+            hashalgo="sha1",
+            attrs=True,
         )
 
     # Creates .pkpass (zip archive)
