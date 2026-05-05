@@ -1,7 +1,7 @@
 # Poetry Ref: https://python-poetry.org/docs/pyproject/
 [tool.poetry]
 name = "applepassgenerator"
-version = "0.0.2"
+version = "0.0.3"
 description = "Python package to create passes compatible with Apple Wallet."
 authors = ["Primedigital Global <oss@primedigital.tech>"]
 maintainers = [
@@ -27,13 +27,17 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Natural Language :: English",
-    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent"
 ]
 
 [tool.poetry.dependencies]
-python = "^3.9"
-cryptography = "<46.0.1"
+python = "^3.10"
+cryptography = ">=42.0.0"
+endesive = "^2.19.3"
 
 [tool.poetry.dev-dependencies]
 bump2version = "^1.0.1"

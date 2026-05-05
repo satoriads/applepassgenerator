@@ -2,6 +2,10 @@
 
 Python library to generate passes i.e (.pkpass) files compatible with Apple Wallet (former Passbook).
 
+> **Satori fork notes (v0.0.3+)**
+>
+> This fork (`satoriads/applepassgenerator`) signs the manifest via [`endesive`](https://github.com/m32/endesive) instead of `cryptography.hazmat.primitives.serialization.pkcs7.PKCS7SignatureBuilder`. Apple Wallet pkpass still requires SHA1 manifest signatures; `cryptography>=39` removed SHA1 from `PKCS7SignatureBuilder` with no opt-in flag (see pyca/cryptography#9401). `endesive` builds the CMS structure via `asn1crypto` and only uses `cryptography` for the raw RSA primitive, which still accepts SHA1. Result: this library works on modern `cryptography` (`>=42`) while keeping Apple compatibility.
+
 ## Table of Contents
 
 - [💾 Installation](#-installation)
