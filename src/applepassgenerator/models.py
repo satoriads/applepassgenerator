@@ -3,9 +3,11 @@ import decimal
 import hashlib
 import json
 import zipfile
+from datetime import datetime, timezone
 from io import BytesIO
 
 # Third Party Stuff
+from asn1crypto import cms, core
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 from endesive import signer as endesive_signer
@@ -358,6 +360,13 @@ class ApplePass(object):
         Built via endesive because cryptography>=39 rejects SHA1 in
         PKCS7SignatureBuilder, while Apple Wallet pkpass still requires
         SHA1 for the manifest signature.
+
+        Apple PassKit silently rejects pkpass files whose SignerInfo
+        signed_attrs deviate from the legacy OpenSSL/cryptography.pkcs7
+        shape, even when the signature is otherwise valid. This passes
+        an explicit attrs list that mirrors that legacy set exactly:
+        content_type, signing_time, message_digest, smime_capabilities.
+        signing_certificate_v2 is intentionally omitted.
         """
         cert = x509.load_pem_x509_certificate(self._read_file_bytes(certificate))
         priv_key = serialization.load_pem_private_key(
@@ -367,14 +376,78 @@ class ApplePass(object):
             self._read_file_bytes(wwdr_certificate)
         )
 
+        manifest_bytes = manifest.encode("UTF-8")
+        message_digest = hashlib.sha1(manifest_bytes).digest()
+        attrs = self._legacy_signed_attrs(message_digest)
+
         return endesive_signer.sign(
-            datau=manifest.encode("UTF-8"),
+            datau=manifest_bytes,
             key=priv_key,
             cert=cert,
             othercerts=[wwdr_cert],
             hashalgo="sha1",
-            attrs=True,
+            attrs=attrs,
         )
+
+    @staticmethod
+    def _legacy_signed_attrs(message_digest):
+        return [
+            cms.CMSAttribute(
+                {
+                    "type": cms.CMSAttributeType("content_type"),
+                    "values": (cms.ContentType("data"),),
+                }
+            ),
+            cms.CMSAttribute(
+                {
+                    "type": cms.CMSAttributeType("signing_time"),
+                    "values": (
+                        cms.Time(
+                            {"utc_time": core.UTCTime(datetime.now(tz=timezone.utc))}
+                        ),
+                    ),
+                }
+            ),
+            cms.CMSAttribute(
+                {
+                    "type": cms.CMSAttributeType("message_digest"),
+                    "values": (cms.OctetString(message_digest),),
+                }
+            ),
+            cms.CMSAttribute(
+                {
+                    "type": cms.CMSAttributeType("smime_capabilities"),
+                    "values": (
+                        cms.SMIMECapabilites(
+                            [
+                                cms.SMIMECapabilityIdentifier(
+                                    {"capability_id": "aes256_cbc"}
+                                ),
+                                cms.SMIMECapabilityIdentifier(
+                                    {"capability_id": "aes192_cbc"}
+                                ),
+                                cms.SMIMECapabilityIdentifier(
+                                    {"capability_id": "aes128_cbc"}
+                                ),
+                                cms.SMIMECapabilityIdentifier(
+                                    {"capability_id": "tripledes_3key"}
+                                ),
+                                cms.SMIMECapabilityIdentifier(
+                                    {"capability_id": "rc2", "parameters": core.Integer(128)}
+                                ),
+                                cms.SMIMECapabilityIdentifier(
+                                    {"capability_id": "rc2", "parameters": core.Integer(64)}
+                                ),
+                                cms.SMIMECapabilityIdentifier({"capability_id": "des"}),
+                                cms.SMIMECapabilityIdentifier(
+                                    {"capability_id": "rc2", "parameters": core.Integer(40)}
+                                ),
+                            ]
+                        ),
+                    ),
+                }
+            ),
+        ]
 
     # Creates .pkpass (zip archive)
     def _create_zip(self, pass_json, manifest, signature, zip_file=None):
